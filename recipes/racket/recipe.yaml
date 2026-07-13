@@ -18,6 +18,8 @@ requirements:
   build:
     - ${{ compiler('c') }}
     - ${{ compiler('cxx') }}
+  host:
+    - openssl 3.*
 
 tests:
   - script:
@@ -42,7 +44,7 @@ tests:
 about:
   homepage: http://racket-lang.org/
   license: LGPL-3.0-only
-  license_file: racket/src/COPYING_LESSER.txt
+  #license_file: racket/src/COPYING_LESSER.txt
   summary: The Racket Programming Language
 
 extra:
