@@ -4,13 +4,13 @@
 # is in the current source directory.
 # Packages can be added once the package manager is configured
 # to work for this particular version number.
-make unix-style CPUS="$CPU_COUNT" PREFIX="$PREFIX" PKGS=""
+make unix-style CPUS="$CPU_COUNT" PREFIX="$PREFIX" PKGS="" \
+  CFLAGS="${CFLAGS} -Wno-implicit-function-declaration -Wno-incompatible-pointer-types"
 
 # Set up the package manager.
 # Following the steps show at
 # https://github.com/jackfirth/racket-docker/blob/master/racket.Dockerfile
 export PATH="$PATH:$PREFIX/bin"
-export CFLAGS="${CFLAGS} -Wno-error=implicit-function-declaration -Wno-error=incompatible-pointer-types"
 raco setup
 raco pkg config --set default-scope installation
 raco pkg config --set catalogs                                         \
