@@ -12,7 +12,7 @@ chmod +x "$SRC_DIR/cpp-wrapper.sh"
 
 make unix-style CPUS="$CPU_COUNT" PREFIX="$PREFIX" PKGS="" \
   CPP="$SRC_DIR/cpp-wrapper.sh" \
-  CFLAGS="${CFLAGS} -Wno-implicit-function-declaration -Wno-incompatible-pointer-types -Wno-implicit-int -Wno-return-local-addr -std=gnu17"
+  CFLAGS="${CFLAGS} -Wno-implicit-function-declaration -Wno-incompatible-pointer-types -Wno-implicit-int -Wno-return-local-addr -std=gnu17 -Dnullptr=0"
 
 # Set up the package manager.
 # Following the steps show at
