@@ -5,7 +5,7 @@
 # Packages can be added once the package manager is configured
 # to work for this particular version number.
 make unix-style CPUS="$CPU_COUNT" PREFIX="$PREFIX" PKGS="" \
-  CFLAGS="${CFLAGS} -Wno-implicit-function-declaration -Wno-incompatible-pointer-types -std=gnu17"
+  CFLAGS="${CFLAGS} -Wno-implicit-function-declaration -Wno-incompatible-pointer-types -Wno-implicit-int -Wno-return-local-addr -std=gnu17"
 
 # Set up the package manager.
 # Following the steps show at
