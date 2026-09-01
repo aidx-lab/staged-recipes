@@ -1,0 +1,83 @@
+schema_version: 1
+
+context:
+  name: nvidia-curobo
+  version: "0.8.0"
+  python_min: "3.10"
+
+package:
+  name: ${{ name }}
+  version: ${{ version }}
+
+source:
+  url: https://github.com/NVlabs/curobo/archive/refs/tags/v${{ version }}.tar.gz
+  sha256: 83fca5ce1d139c541481319614f49e175be136bb908589b67a61658d6c254df6
+
+build:
+  noarch: python
+  number: 0
+  script: ${{ PYTHON }} -m pip install . -vv --no-deps --no-build-isolation
+
+requirements:
+  host:
+    - python ${{ python_min }}.*
+    - pip
+    - setuptools >=45
+    - setuptools-scm >=6.2
+    - wheel
+  run:
+    - python >=${{ python_min }}
+    - importlib_resources
+    - matplotlib
+    - networkx
+    - numpy
+    - numpy-quaternion
+    - pyyaml
+    - scipy >=1.7.0
+    - setuptools-scm >=6.2
+    - tqdm
+    - trimesh
+    - viser
+    - warp-lang >=0.10.0
+    - wheel
+    - yourdfpy >=0.0.53
+    - pytorch >=2.9
+    - cuda-core >=0.6
+
+tests:
+  - python:
+      imports:
+        - curobo
+      python_version:
+        - ${{ python_min }}.*
+        - "*"
+      pip_check: true
+
+about:
+  homepage: https://nvlabs.github.io/curobo
+  repository: https://github.com/NVlabs/curobo
+  documentation: https://nvlabs.github.io/curobo/latest/
+  license: Apache-2.0
+  license_file: LICENSE
+  summary: >-
+    CUDA-accelerated robot library for GPU-parallel kinematics,
+    collision checking, trajectory optimization, and motion planning.
+  description: |
+    cuRobo is a CUDA-accelerated library for robot motion generation, built on
+    PyTorch, CUDA, and NVIDIA Warp. It provides GPU-parallel algorithms for
+    forward/inverse kinematics, collision checking, trajectory optimization,
+    geometric planning, GPU-native perception, and whole-body motion generation,
+    scaling from single-arm manipulators to high-DoF humanoids.
+
+    **Requires an NVIDIA GPU (Volta or newer, >= 4 GB VRAM) and a working CUDA
+    toolkit at runtime.** PyTorch with matching CUDA support must be installed
+    separately (e.g. from the `pytorch` channel).
+
+    This package ships the default `cuda.core` runtime-compilation backend.
+    CUDA kernels are JIT-compiled on first use. For the optional pre-compiled
+    pybind backend, install `pybind11` and rebuild from source with
+    `CUROBO_USE_PYBIND=1`.
+
+extra:
+  recipe-maintainers:
+    - cornerfarmer
