@@ -1,0 +1,75 @@
+schema_version: 1
+
+context:
+  name: vamp-planner
+  version: "0.6.4"
+  python_min: "3.8"
+
+package:
+  name: ${{ name }}
+  version: ${{ version }}
+
+source:
+  url: https://github.com/kavrakilab/vamp/archive/refs/tags/v${{ version }}.tar.gz
+  sha256: 840eb02b3a06d94d518a510f2283261e351208488126387f3598ee1f283502ad
+
+build:
+  number: 0
+  # Compiled C++ extension with SIMD — not noarch
+  script:
+    - export SETUPTOOLS_SCM_PRETEND_VERSION=${{ version }}
+    - ${{ PYTHON }} -m pip install . -vv --no-deps --no-build-isolation
+  skip:
+    - win
+
+requirements:
+  build:
+    - ${{ compiler('c') }}
+    - ${{ compiler('cxx') }}
+    - cmake >=3.16
+    - make                           # [unix]
+    - ninja                          # [unix]
+  host:
+    - python
+    - pip
+    - scikit-build-core >=0.4.3
+    - nanobind >=2.0.0
+    - typing_extensions
+    - eigen
+  run:
+    - python
+    - numpy
+
+tests:
+  - python:
+      imports:
+        - vamp
+      pip_check: true
+
+about:
+  homepage: https://github.com/KavrakiLab/vamp
+  repository: https://github.com/KavrakiLab/vamp
+  license: Apache-2.0
+  license_file:
+    - LICENSE.txt
+    - licenses/nigh/LICENSE
+    - licenses/pdqsort/license.txt
+    - licenses/SIMDxorshift/LICENSE
+    - licenses/nanobind/LICENSE
+  summary: >-
+    VAMP: Vector-Accelerated Motion Planning via SIMD-parallelized
+    sampling-based algorithms.
+  description: |
+    VAMP (Vector-Accelerated Motion Planner) is a high-performance
+    motion planning library that uses SIMD intrinsics (AVX2 on x86,
+    NEON on ARM) to accelerate collision checking and nearest-neighbor
+    searches. It provides Python bindings for planning with several
+    built-in robot models (Panda, UR5, Fetch, Baxter, Sphere) and
+    supports custom environments via point-cloud and heightmap
+    representations.
+
+    Requires an x86_64 CPU with AVX2 support, or an aarch64/arm64 CPU.
+
+extra:
+  recipe-maintainers:
+    - cornerfarmer
