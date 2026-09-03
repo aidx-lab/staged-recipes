@@ -15,8 +15,9 @@ source:
 
 build:
   noarch: python
-  number: 0
+  number: 1
   script:
+    - echo "recursive-include curobo/content *" > MANIFEST.in
     - export SETUPTOOLS_SCM_PRETEND_VERSION=${{ version }}
     - ${{ PYTHON }} -m pip install . -vv --no-deps --no-build-isolation
 
@@ -45,6 +46,7 @@ requirements:
     - yourdfpy >=0.0.53
     - pytorch >=2.9
     - cuda-core >=0.6
+    - cuda-nvrtc-dev
 
 tests:
   - python:
@@ -54,6 +56,8 @@ tests:
         - ${{ python_min }}.*
         - "*"
       pip_check: true
+  - script:
+      - python -c "from curobo._src.util_file import get_robot_configs_path, join_path, load_yaml; load_yaml(join_path(get_robot_configs_path(), 'franka.yml'))"
 
 about:
   homepage: https://nvlabs.github.io/curobo
