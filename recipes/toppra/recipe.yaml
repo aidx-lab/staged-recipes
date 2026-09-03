@@ -1,0 +1,61 @@
+schema_version: 1
+
+context:
+  name: toppra
+  version: "0.6.3"
+
+package:
+  name: ${{ name }}
+  version: ${{ version }}
+
+# PyPI sdist: 0.6.3 has no git tag, and 0.6.4+ ship Linux-only wheels.
+# This is the python package (import toppra), not conda-forge's toppra-python.
+source:
+  url: https://files.pythonhosted.org/packages/source/t/toppra/toppra-${{ version }}.tar.gz
+  sha256: 5a8926128a9decce85d11bac3e9a2aa2fbf2882653053b10f5cb42e0e21a401e
+
+build:
+  number: 0
+  script:
+    - ${{ PYTHON }} -m pip install . -vv --no-deps --no-build-isolation
+
+requirements:
+  build:
+    - ${{ compiler('c') }}
+  host:
+    - python  # version from variants.yaml
+    - pip
+    - setuptools
+    - wheel
+    - cython
+    - numpy
+  run:
+    - python
+    - numpy
+    - scipy >0.18
+    - matplotlib
+
+tests:
+  - python:
+      imports:
+        - toppra
+        - toppra.algorithm
+        - toppra.constraint
+        - toppra.solverwrapper.cy_seidel_solverwrapper
+      pip_check: true
+  - script:
+      - python -c "import numpy as np, toppra as ta, toppra.algorithm as algo, toppra.constraint as tc; q = np.random.default_rng(0).uniform(-1.0, 1.0, (5, 3)); path = ta.SplineInterpolator(np.linspace(0.0, 1.0, 5), q); vel = tc.JointVelocityConstraint(np.array([[-1.0, 1.0]] * 3)); acc = tc.JointAccelerationConstraint(np.array([[-2.0, 2.0]] * 3)); inst = algo.TOPPRA([vel, acc], path, solver_wrapper='seidel'); traj = inst.compute_trajectory(0.0, 0.0); assert traj is not None and traj.duration > 0.0"
+
+about:
+  homepage: https://github.com/hungpham2511/toppra
+  repository: https://github.com/hungpham2511/toppra
+  documentation: https://hungpham2511.github.io/toppra/
+  license: MIT
+  license_file: LICENSE
+  summary: Time-optimal path parameterization by reachability analysis (TOPP-RA), the Python library.
+  description: |
+    The PyPI toppra python package, built from the 0.6.3 sdist with its Cython solver wrapper.
+
+extra:
+  recipe-maintainers:
+    - tenhjo
