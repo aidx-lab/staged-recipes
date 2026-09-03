@@ -1,0 +1,53 @@
+schema_version: 1
+
+context:
+  name: ids-peak
+  version: "26.06.1"
+
+package:
+  name: ${{ name }}
+  version: ${{ version }}
+
+source:
+  url: file://${{ RECIPE_DIR }}/ids-peak_26.06.1_amd64.tar.gz
+  sha256: 83fca5ce1d139c541481319614f49e175be136bb908589b67a61658d6c254df6
+
+build:
+  noarch: python
+  number: 0
+  script: |
+    cp lib/x86_64-linux-gnu/* lib/
+    rm -r lib/x86_64-linux-gnu
+    cp * $PREFIX/ -r
+
+    # Create activation/deactivation scripts
+    mkdir -p $PREFIX/etc/conda/activate.d
+    mkdir -p $PREFIX/etc/conda/deactivate.d
+
+    cat > $PREFIX/etc/conda/activate.d/${{ name }}-env.sh << 'EOF'
+    export GENICAM_GENTL64_PATH=$CONDA_PREFIX/lib/x86_64-linux-gnu/ids-peak/cti
+    EOF
+
+    cat > $PREFIX/etc/conda/deactivate.d/${{ name }}-env.sh << 'EOF'
+    unset GENICAM_GENTL64_PATH
+    EOF
+
+requirements:
+  run:
+    - qt-main 5.*
+    - libusb
+
+
+tests:
+  - script:
+    ids_peak_cockpit --version
+  - script:
+    ids_ipconfig --version
+
+about:
+  homepage: https://de.ids-imaging.com/ids-peak.html
+  documentation: https://de.ids-imaging.com/ids-peak.html
+
+extra:
+  recipe-maintainers:
+    - cornerfarmer
