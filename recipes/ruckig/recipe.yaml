@@ -1,0 +1,53 @@
+schema_version: 1
+
+context:
+  name: ruckig
+  version: "0.19.4"
+
+package:
+  name: ${{ name }}
+  version: ${{ version }}
+
+source:
+  url: https://github.com/pantor/ruckig/archive/refs/tags/v${{ version }}.tar.gz
+  sha256: 4f57caa350770ce162aed92285fc07ac23e83b89bf802f5f500fb4bc8b2a1905
+
+build:
+  number: 0
+  script:
+    - ${{ PYTHON }} -m pip install . -vv --no-deps --no-build-isolation
+
+requirements:
+  build:
+    - ${{ compiler('cxx') }}
+    - cmake >=3.14
+    - ninja
+  host:
+    - python  # version from variants.yaml
+    - pip
+    - scikit-build-core >=0.10
+    - nanobind >=2.7
+  run:
+    - python
+
+tests:
+  - python:
+      imports:
+        - ruckig
+      pip_check: true
+  - script:
+      - python -c "from ruckig import InputParameter, OutputParameter, Result, Ruckig; otg = Ruckig(1, 0.001); inp = InputParameter(1); out = OutputParameter(1); inp.current_position = [0.0]; inp.target_position = [1.0]; inp.max_velocity = [1.0]; inp.max_acceleration = [2.0]; inp.max_jerk = [10.0]; assert otg.update(inp, out) == Result.Working; assert out.trajectory.duration > 0.0"
+
+about:
+  homepage: https://ruckig.com
+  repository: https://github.com/pantor/ruckig
+  documentation: https://docs.ruckig.com
+  license: MIT
+  license_file: LICENSE
+  summary: Jerk-limited online trajectory generation for robots and machines.
+  description: |
+    Python binding (nanobind) of the Ruckig C++ library, built from the upstream tag.
+
+extra:
+  recipe-maintainers:
+    - tenhjo
