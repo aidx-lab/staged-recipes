@@ -1,0 +1,63 @@
+schema_version: 1
+
+context:
+  name: copp-py
+  version: "0.2.2"
+
+package:
+  name: ${{ name }}
+  version: ${{ version }}
+
+source:
+  url: https://github.com/TOPP-THU/copp/archive/refs/tags/v${{ version }}.tar.gz
+  sha256: 9465096825dc672630a57fc49e3e16c5fb42af91a23fd416c9717f8c86717bea
+
+build:
+  number: 0
+  script:
+    # Rust links its dependencies into the extension, so their licences ship too.
+    - cargo-bundle-licenses --format yaml --output THIRDPARTY.yml
+    - ${{ PYTHON }} -m pip install . -vv --no-deps --no-build-isolation
+
+requirements:
+  build:
+    - ${{ compiler('c') }}
+    - ${{ compiler('rust') }}
+    - cargo-bundle-licenses
+  host:
+    - python  # version from variants.yaml
+    - pip
+    - maturin >=1.9.4,<2.0
+  run:
+    - python
+    - numpy
+
+tests:
+  - python:
+      imports:
+        - copp_py
+      pip_check: true
+  - script:
+      - python -c "import numpy as np; import copp_py as copp; n = 101; s = np.linspace(0.0, 1.0, n); r = copp.Robot(1, capacity=n); r.append_s(s); r.set_q(s.reshape(n, 1), np.ones((n, 1)), np.zeros((n, 1)), 0, dddq=np.zeros((n, 1))); r.add_velocity_limits(np.ones(1), -np.ones(1), start_idx_s=0); r.add_acceleration_limits(np.ones(1), -np.ones(1), start_idx_s=0); p = copp.solver.topp2_ra.Problem(r.constraints, idx_s_interval=(0, n - 1), a_boundary=(0.0, 0.0)); assert len(np.asarray(copp.solver.topp2_ra.solve(p, copp.solver.topp2_ra.Options()))) == n"
+
+about:
+  homepage: https://copp.pro
+  repository: https://github.com/TOPP-THU/copp
+  documentation: https://docs.copp.pro
+  license: MIT
+  license_file:
+    - LICENSE
+    - THIRDPARTY.yml
+  summary: Convex-objective path parameterization for robotic trajectory planning.
+  description: |
+    Python binding (pyo3/maturin) of the COPP Rust library, built from the
+    upstream tag. Provides the fixed-path second- and third-order solvers
+    (TOPP2-RA, COPP2-SOCP, TOPP3-LP/SOCP) used as published baselines.
+
+    This packages UNMODIFIED upstream. retime's `copp_lp_sided` and
+    `copp_socp_sided` methods need the local `one_sided_jerk_v1` patch and are
+    not served by this package; see thirdparty/copp/VENDOR.md in johten-monos.
+
+extra:
+  recipe-maintainers:
+    - tenhjo
