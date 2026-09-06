@@ -15,7 +15,15 @@ source:
 build:
   number: 0
   script:
-    - ${{ PYTHON }} -m pip install . -vv --no-deps --no-build-isolation
+    # BUILD_CLOUD_CLIENT defaults ON and compiles the vendored third_party/httplib
+    # into the main target; that header calls std::current_exception() without
+    # including <exception>, which modern libc++ rejects. Nothing here uses the
+    # Ruckig Pro cloud, so the client, tests and examples are all off.
+    - >-
+      ${{ PYTHON }} -m pip install . -vv --no-deps --no-build-isolation
+      --config-settings=cmake.define.BUILD_CLOUD_CLIENT=OFF
+      --config-settings=cmake.define.BUILD_TESTS=OFF
+      --config-settings=cmake.define.BUILD_EXAMPLES=OFF
 
 requirements:
   build:
