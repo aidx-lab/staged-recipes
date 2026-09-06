@@ -11,6 +11,9 @@ package:
 source:
   url: https://github.com/TOPP-THU/copp/archive/refs/tags/v${{ version }}.tar.gz
   sha256: 9465096825dc672630a57fc49e3e16c5fb42af91a23fd416c9717f8c86717bea
+  patches:
+    # Adds the paper's one-sided third-order jerk rows. See the patch header.
+    - patches/one_sided_jerk_v1.patch
 
 build:
   number: 0
@@ -38,6 +41,8 @@ tests:
         - copp_py
       pip_check: true
   - script:
+      # The patch must actually be in the build: `side` does not exist upstream.
+      - python -c "from inspect import signature; import copp_py; assert 'side' in signature(copp_py.Constraints.add_constraint_3rd).parameters"
       - python -c "import numpy as np; import copp_py as copp; n = 101; s = np.linspace(0.0, 1.0, n); r = copp.Robot(1, capacity=n); r.append_s(s); r.set_q(s.reshape(n, 1), np.ones((n, 1)), np.zeros((n, 1)), 0, dddq=np.zeros((n, 1))); r.add_velocity_limits(np.ones(1), -np.ones(1), start_idx_s=0); r.add_acceleration_limits(np.ones(1), -np.ones(1), start_idx_s=0); p = copp.solver.topp2_ra.Problem(r.constraints, idx_s_interval=(0, n - 1), a_boundary=(0.0, 0.0)); assert len(np.asarray(copp.solver.topp2_ra.solve(p, copp.solver.topp2_ra.Options()))) == n"
 
 about:
@@ -50,13 +55,23 @@ about:
     - THIRDPARTY.yml
   summary: Convex-objective path parameterization for robotic trajectory planning.
   description: |
-    Python binding (pyo3/maturin) of the COPP Rust library, built from the
-    upstream tag. Provides the fixed-path second- and third-order solvers
-    (TOPP2-RA, COPP2-SOCP, TOPP3-LP/SOCP) used as published baselines.
+    Python binding (pyo3/maturin) of the COPP Rust library. Provides the
+    fixed-path second- and third-order solvers (TOPP2-RA, COPP2-SOCP,
+    TOPP3-LP/SOCP) used as published baselines.
 
-    This packages UNMODIFIED upstream. retime's `copp_lp_sided` and
-    `copp_socp_sided` methods need the local `one_sided_jerk_v1` patch and are
-    not served by this package; see thirdparty/copp/VENDOR.md in johten-monos.
+    NOT plain upstream 0.2.2. This build carries the local `one_sided_jerk_v1`
+    patch, which adds a `ConstraintSide` (Both/Left/Right) so a third-order
+    jerk row can be attached to a single adjacent interval — the paper's
+    one-sided constraints (Eqs. 7c-d) at polynomial knots where the left and
+    right path derivatives differ. `Both` is the default, so existing C, C++
+    and Robot callers keep upstream two-sided behaviour, but the Python
+    `add_constraint_3rd` gains a `side` keyword that PyPI's 0.2.2 does not
+    have. Code written against this package is not portable to the PyPI build.
+
+    The patch also restricts jerk linearization to active rows, fixing a shape
+    mismatch for nonuniform row counts.
+
+    Consumed by retime's `copp_lp_sided` and `copp_socp_sided` methods.
 
 extra:
   recipe-maintainers:
