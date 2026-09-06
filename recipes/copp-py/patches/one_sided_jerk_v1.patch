@@ -1,0 +1,412 @@
+Local patch one_sided_jerk_v1 for COPP 0.2.2.
+
+Adds ConstraintSide (Both/Left/Right) so a third-order jerk row can be
+attached to only one adjacent interval, implementing the paper's one-sided
+constraints (Eqs. 7c-d) at polynomial knots where the left and right path
+derivatives differ. Both is the default, so existing C, C++ and Robot
+callers keep their current two-sided behaviour.
+
+Also restricts jerk linearization to active rows, fixing a shape mismatch
+for nonuniform row counts.
+
+diff -ruN a/bindings/python/copp_py/_stubs/constraints.pyi b/bindings/python/copp_py/_stubs/constraints.pyi
+--- a/bindings/python/copp_py/_stubs/constraints.pyi	2026-06-03 03:26:25
++++ b/bindings/python/copp_py/_stubs/constraints.pyi	2026-09-06 15:39:09
+@@ -132,10 +132,12 @@
+         idx_s: int,
+         *,
+         is_negative: bool = False,
++        side: str = "both",
+         layout: MatrixLayoutLike = MatrixLayout.SAMPLE_MAJOR,
+     ) -> None:
+         """Add raw third-order jerk rows.
+ 
++        ``side`` selects "left", "right", or "both" limits at each station.
+         Rows follow the Rust constraint model
+         ``sqrt(a) * (jerk_a*a + jerk_b*b + jerk_c*c + jerk_d) <= jerk_max``.
+         ``is_negative=True`` forwards the Rust sign-flip mode.
+diff -ruN a/src/copp/constraints.rs b/src/copp/constraints.rs
+--- a/src/copp/constraints.rs	2026-06-03 03:26:25
++++ b/src/copp/constraints.rs	2026-09-06 15:39:09
+@@ -68,6 +68,19 @@
+ /// coefficients). It is **not** a global optimization tolerance.
+ const EPSILON_NUMERIC: f64 = 1E-10;
+ 
++/// Which one-sided limit at a station a third-order row constrains.
++#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
++#[repr(i8)]
++pub enum ConstraintSide {
++    /// Apply the row on both adjacent intervals (continuous coefficients).
++    #[default]
++    Both = 0,
++    /// Apply the row only to the interval ending at this station.
++    Left = -1,
++    /// Apply the row only to the interval starting at this station.
++    Right = 1,
++}
++
+ /// Constraint storage and query object used by TOPP/COPP solvers.
+ ///
+ /// # Mathematical symbols (with code mapping)
+@@ -169,6 +182,8 @@
+     jerk_c: DMatrix<f64>,
+     /// Nonlinear third-order constant term.
+     jerk_d: DMatrix<f64>,
++    /// Row side encoded as -1 (left), 0 (both), +1 (right), sharing circular storage.
++    jerk_side: DMatrix<f64>,
+     /// Nonlinear third-order right-hand side bound.
+     jerk_max: DMatrix<f64>,
+     /// Linearized third-order coefficient for `a`.
+@@ -277,6 +292,7 @@
+             jerk_b: DMatrix::<f64>::zeros(2 * dim, capacity_col),
+             jerk_c: DMatrix::<f64>::zeros(2 * dim, capacity_col),
+             jerk_d: DMatrix::<f64>::zeros(2 * dim, capacity_col),
++            jerk_side: DMatrix::<f64>::zeros(2 * dim, capacity_col),
+             jerk_max: DMatrix::<f64>::from_element(2 * dim, capacity_col, f64::INFINITY),
+             jerk_a_linear: DMatrix::<f64>::zeros(2 * dim, capacity_col),
+             jerk_max_linear: DMatrix::<f64>::from_element(2 * dim, capacity_col, f64::INFINITY),
+@@ -695,6 +711,7 @@
+             (&mut self.jerk_b, 0.0),
+             (&mut self.jerk_c, 0.0),
+             (&mut self.jerk_d, 0.0),
++            (&mut self.jerk_side, 0.0),
+             (&mut self.jerk_max, f64::INFINITY),
+             (&mut self.jerk_a_linear, 0.0),
+             (&mut self.jerk_max_linear, f64::INFINITY),
+@@ -1360,6 +1377,7 @@
+     ///     &jerk_max.as_view(),
+     ///     0,
+     ///     false,
++    ///     copp::constraints::ConstraintSide::Both,
+     /// )?;
+     /// assert_eq!(constraints.get_jerk_constraints(1)?.0.nrows(), 2);
+     /// # Ok(())
+@@ -1375,6 +1393,7 @@
+         jerk_max_new: &InputMatrix,
+         idx_s: usize,
+         is_negative: bool,
++        side: ConstraintSide,
+     ) -> Result<&mut Self, ConstraintError> {
+         // Check dimensions and bounds
+         if [&jerk_b_new, &jerk_c_new, &jerk_d_new, &jerk_max_new]
+@@ -1423,11 +1442,27 @@
+             )
+         });
+ 
++        let sides =
++            DMatrix::from_element(jerk_a_new.nrows(), jerk_a_new.ncols(), side as i8 as f64);
++        Self::concat_from_matrix_to_cirmatrix(
++            &mut self.jerk_side,
++            &self.valid_rows_jerk,
++            &sides.as_view(),
++            start_idx,
++            idx_s,
++            false,
++        );
+         Self::merge_valid_rows(&mut self.valid_rows_jerk, idx_s, idx_s + jerk_a_new.ncols());
+ 
+         Ok(self)
+     }
+ 
++    /// Whether a stored jerk row belongs to the requested one-sided limit.
++    pub(crate) fn jerk_row_applies(&self, idx_s: usize, row: usize, side: ConstraintSide) -> bool {
++        let stored = self.jerk_side[(row, self.idx(idx_s - self.idx_s))];
++        stored == 0.0 || stored == side as i8 as f64
++    }
++
+     /// Linearize third-order jerk constraints around a reference profile `a_linear`.
+     ///
+     /// # Purpose
+@@ -1507,10 +1542,13 @@
+                     .view_mut((0, start_idx_), (num_valid_rows, ncols))
+                     .copy_from(&self.jerk_a.view((0, start_idx_), (num_valid_rows, ncols)));
+                 self.jerk_a_linear
++                    .view_mut((0, start_idx_), (num_valid_rows, ncols))
+                     .column_iter_mut()
+-                    .zip(self.jerk_max.column_iter())
+-                    .skip(start_idx_)
+-                    .take(ncols)
++                    .zip(
++                        self.jerk_max
++                            .view((0, start_idx_), (num_valid_rows, ncols))
++                            .column_iter(),
++                    )
+                     .zip(a_linear_one_half[(idx_left + offset)..(idx_left + offset + ncols)].iter())
+                     .for_each(|((mut jerk_a_linear, jerk_max), &a_lin_o_h)| {
+                         jerk_a_linear.axpy(0.5 * a_lin_o_h, &jerk_max, 1.0);
+@@ -1523,10 +1561,13 @@
+                     .view_mut((0, start_idx_), (num_valid_rows, ncols))
+                     .neg_mut();
+                 self.jerk_max_linear
++                    .view_mut((0, start_idx_), (num_valid_rows, ncols))
+                     .column_iter_mut()
+-                    .zip(self.jerk_max.column_iter())
+-                    .skip(start_idx_)
+-                    .take(ncols)
++                    .zip(
++                        self.jerk_max
++                            .view((0, start_idx_), (num_valid_rows, ncols))
++                            .column_iter(),
++                    )
+                     .zip(a_linear_half[(idx_left + offset)..(idx_left + offset + ncols)].iter())
+                     .for_each(|((mut jerk_max_linear, jerk_max), &a_lin_h)| {
+                         jerk_max_linear.axpy(1.5 * a_lin_h, &jerk_max, 1.0);
+@@ -1971,13 +2012,28 @@
+         for &(i, ds_to_start, alpha, a_linear_half, a_linear_one_half) in vec_prepare.iter() {
+             let (jerk_a, jerk_b, jerk_c, jerk_d, jerk_max) =
+                 self.jerk_constraints_unchecked(idx_s_start + i);
+-            for (&a_coeff, &b_coeff, &c_coeff, &d_coeff, &jmax_curr) in izip!(
++            for (row, (&a_coeff, &b_coeff, &c_coeff, &d_coeff, &jmax_curr)) in izip!(
+                 jerk_a.iter(),
+                 jerk_b.iter(),
+                 jerk_c.iter(),
+                 jerk_d.iter(),
+                 jerk_max.iter()
+-            ) {
++            )
++            .enumerate()
++            {
++                if i == id_a
++                    && !self.jerk_row_applies(
++                        idx_s_start + i,
++                        row,
++                        if REV {
++                            ConstraintSide::Right
++                        } else {
++                            ConstraintSide::Left
++                        },
++                    )
++                {
++                    continue;
++                }
+                 if jmax_curr.is_finite() {
+                     let coeff: f64 = (a_coeff
+                         + b_coeff / (1.5 * ds_to_start)
+@@ -2225,6 +2281,46 @@
+ mod tests {
+     use super::*;
+     use crate::robot::Robot;
++
++    #[test]
++    fn test_jerk_sides_survive_circular_storage_and_growth() -> Result<(), ConstraintError> {
++        let mut constraints = Constraints::with_capacity(1, 3);
++        constraints.with_s([0.0, 0.5, 1.0].as_slice())?;
++        let one = DMatrix::from_element(1, 1, 1.0);
++        for side in [ConstraintSide::Left, ConstraintSide::Right] {
++            constraints.with_constraint_3order(
++                &one.as_view(),
++                &one.as_view(),
++                &one.as_view(),
++                &one.as_view(),
++                &one.as_view(),
++                1,
++                true,
++                side,
++            )?;
++        }
++        constraints.pop_front(ModePopConstraints::PopNCols(1));
++        constraints.with_s([1.5].as_slice())?;
++        constraints.expand_capacity(8);
++        assert!(constraints.jerk_row_applies(1, 0, ConstraintSide::Left));
++        assert!(!constraints.jerk_row_applies(1, 0, ConstraintSide::Right));
++        assert!(constraints.jerk_row_applies(1, 1, ConstraintSide::Right));
++        assert!(!constraints.jerk_row_applies(1, 1, ConstraintSide::Left));
++        // Fresh rows retain legacy Both behavior after growth.
++        constraints.with_constraint_3order(
++            &one.as_view(),
++            &one.as_view(),
++            &one.as_view(),
++            &one.as_view(),
++            &one.as_view(),
++            3,
++            false,
++            ConstraintSide::Both,
++        )?;
++        assert!(constraints.jerk_row_applies(3, 0, ConstraintSide::Left));
++        assert!(constraints.jerk_row_applies(3, 0, ConstraintSide::Right));
++        Ok(())
++    }
+ 
+     #[test]
+     fn test_constraints() -> Result<(), ConstraintError> {
+diff -ruN a/src/copp/copp3/opt3/clarabel_constraints.rs b/src/copp/copp3/opt3/clarabel_constraints.rs
+--- a/src/copp/copp3/opt3/clarabel_constraints.rs	2026-06-03 03:26:25
++++ b/src/copp/copp3/opt3/clarabel_constraints.rs	2026-09-06 15:39:09
+@@ -15,7 +15,7 @@
+ //! - equivalent implementation view: `A*x - b = -s`.
+ 
+ use crate::copp::clarabel_backend::ConstraintsClarabel;
+-use crate::copp::constraints::Constraints;
++use crate::copp::constraints::{ConstraintSide, Constraints};
+ use crate::copp::copp3::formulation::Topp3Problem;
+ use crate::diag::{CoppError, Verboser, Verbosity};
+ use clarabel::solver::{NonnegativeConeT, SupportedConeT, ZeroConeT};
+@@ -129,52 +129,28 @@
+         let (jerk_a_linear, jerk_b, jerk_c, jerk_max_linear) = problem
+             .constraints
+             .jerk_linear_constraints_unchecked(problem.idx_s_start + k);
+-        let nrows = jerk_a_linear.nrows();
+-
+-        if k > num_stationary.0 {
+-            // jerk_a_linear * a[k] + jerk_b * b[k] + jerk_c * c[k-1] <= jerk_max_linear
+-            // jerk_a_linear * a[k] + jerk_b * b[k] + jerk_c / ds * (b[k] - b[k-1]) <= jerk_max_linear
+-            // jerk_a_linear * a[k] - jerk_c / ds * b[k-1] + (jerk_b + jerk_c / ds) * b[k] <= jerk_max_linear
+-            // A*x-b = -s = jerk_a_linear * x[k] - jerk_ds_down * x[n+k] + (jerk_b + jerk_ds_down) * b[n+k+1] - jerk_max_linear <= 0
+-            let ds_down = 1.0 / (s[k] - s[k - 1]);
+-            row.extend(b.len()..(b.len() + nrows));
+-            row.extend(b.len()..(b.len() + nrows));
+-            row.extend(b.len()..(b.len() + nrows));
+-            col.resize(col.len() + nrows, k);
+-            col.resize(col.len() + nrows, n + k);
+-            col.resize(col.len() + nrows, n + k + 1);
+-            val.extend(jerk_a_linear.iter());
+-            val.extend(jerk_c.iter().map(|&c_coeff| -c_coeff * ds_down));
+-            val.extend(
+-                jerk_b
+-                    .iter()
+-                    .zip(jerk_c.iter())
+-                    .map(|(&b_coeff, &c_coeff)| b_coeff + c_coeff * ds_down),
+-            );
+-            b.extend(jerk_max_linear.iter());
+-        }
+-
+-        if k < n - num_stationary.1 {
+-            // jerk_a_linear * a[k] + jerk_b * b[k] + jerk_c * c[k] <= jerk_max_linear
+-            // jerk_a_linear * a[k] + jerk_b * b[k] + jerk_c / ds * (b[k+1] - b[k]) <= jerk_max_linear
+-            // jerk_a_linear * a[k] + (jerk_b - jerk_c / ds) * b[k] + jerk_c / ds * b[k+1] <= jerk_max_linear
+-            // A*x-b = -s = jerk_a_linear * x[k] + (jerk_b - jerk_c / ds) * x[n+k+1] + jerk_c / ds * x[n+k+2] - jerk_max_linear <= 0
+-            let ds_down = 1.0 / (s[k + 1] - s[k]);
+-            row.extend(b.len()..(b.len() + nrows));
+-            row.extend(b.len()..(b.len() + nrows));
+-            row.extend(b.len()..(b.len() + nrows));
+-            col.resize(col.len() + nrows, k);
+-            col.resize(col.len() + nrows, n + k + 1);
+-            col.resize(col.len() + nrows, n + k + 2);
+-            val.extend(jerk_a_linear.iter());
+-            val.extend(
+-                jerk_b
+-                    .iter()
+-                    .zip(jerk_c.iter())
+-                    .map(|(&b_coeff, &c_coeff)| b_coeff - c_coeff * ds_down),
+-            );
+-            val.extend(jerk_c.iter().map(|&c_coeff| c_coeff * ds_down));
+-            b.extend(jerk_max_linear.iter());
++        for r in 0..jerk_a_linear.nrows() {
++            for (side, adjacent) in [
++                (ConstraintSide::Left, k.checked_sub(1)),
++                (ConstraintSide::Right, k.checked_add(1)),
++            ] {
++                let Some(adjacent) = adjacent else { continue };
++                if adjacent < num_stationary.0
++                    || adjacent > n - num_stationary.1
++                    || !problem
++                        .constraints
++                        .jerk_row_applies(problem.idx_s_start + k, r, side)
++                {
++                    continue;
++                }
++                let ds = s[adjacent] - s[k];
++                let c_ds = jerk_c[r] / ds;
++                // c on this side = (b[adjacent] - b[k]) / (s[adjacent] - s[k]).
++                row.extend([b.len(); 3]);
++                col.extend([k, n + k + 1, n + adjacent + 1]);
++                val.extend([jerk_a_linear[r], jerk_b[r] - c_ds, c_ds]);
++                b.push(jerk_max_linear[r]);
++            }
+         }
+     }
+ 
+diff -ruN a/src/ffi/c/robot.rs b/src/ffi/c/robot.rs
+--- a/src/ffi/c/robot.rs	2026-06-03 03:26:25
++++ b/src/ffi/c/robot.rs	2026-09-06 15:39:09
+@@ -1358,7 +1358,16 @@
+ 
+         robot
+             .constraints
+-            .with_constraint_3order(&jerk_a, &jerk_b, &jerk_c, &jerk_d, &jerk_max, idx_s, false)
++            .with_constraint_3order(
++                &jerk_a,
++                &jerk_b,
++                &jerk_c,
++                &jerk_d,
++                &jerk_max,
++                idx_s,
++                false,
++                crate::copp::constraints::ConstraintSide::Both,
++            )
+             .map_err(|error| CoppStatus::from(&error))?;
+ 
+         Ok(CoppStatus::Ok)
+diff -ruN a/src/ffi/cpp/mod.rs b/src/ffi/cpp/mod.rs
+--- a/src/ffi/cpp/mod.rs	2026-06-03 03:26:25
++++ b/src/ffi/cpp/mod.rs	2026-09-06 15:39:09
+@@ -2989,6 +2989,7 @@
+                 &jerk_max.as_view(),
+                 idx_s,
+                 is_negative,
++                crate::copp::constraints::ConstraintSide::Both,
+             )
+             .map(|_| ())
+             .map_err(|error| error.to_string())
+diff -ruN a/src/ffi/python/robot.rs b/src/ffi/python/robot.rs
+--- a/src/ffi/python/robot.rs	2026-06-03 03:26:25
++++ b/src/ffi/python/robot.rs	2026-09-06 15:39:09
+@@ -688,8 +688,8 @@
+ 
+     /// Add third-order raw constraints.
+     #[pyo3(
+-        signature = (jerk_a, jerk_b, jerk_c, jerk_d, jerk_max, idx_s, *, is_negative = false, layout = MatrixLayoutArg(PyMatrixLayout::SampleMajor)),
+-        text_signature = "(jerk_a, jerk_b, jerk_c, jerk_d, jerk_max, idx_s, *, is_negative=False, layout='sample_major')"
++        signature = (jerk_a, jerk_b, jerk_c, jerk_d, jerk_max, idx_s, *, is_negative = false, side = "both", layout = MatrixLayoutArg(PyMatrixLayout::SampleMajor)),
++        text_signature = "(jerk_a, jerk_b, jerk_c, jerk_d, jerk_max, idx_s, *, is_negative=False, side='both', layout='sample_major')"
+     )]
+     fn add_constraint_3rd(
+         &self,
+@@ -700,8 +700,20 @@
+         jerk_max: &Bound<'_, PyAny>,
+         idx_s: usize,
+         is_negative: bool,
++        side: &str,
+         layout: MatrixLayoutArg,
+     ) -> PyResult<()> {
++        use crate::copp::constraints::ConstraintSide;
++        let side = match side {
++            "both" => ConstraintSide::Both,
++            "left" => ConstraintSide::Left,
++            "right" => ConstraintSide::Right,
++            _ => {
++                return Err(PyValueError::new_err(
++                    "side must be 'both', 'left', or 'right'",
++                ));
++            }
++        };
+         let jerk_a = matrix_to_dmatrix("jerk_a", jerk_a, layout.0, None)?;
+         let jerk_b = matrix_to_dmatrix("jerk_b", jerk_b, layout.0, None)?;
+         let jerk_c = matrix_to_dmatrix("jerk_c", jerk_c, layout.0, None)?;
+@@ -717,6 +729,7 @@
+                 &jerk_max.as_view(),
+                 idx_s,
+                 is_negative,
++                side,
+             )
+             .map(|_| ())
+             .map_err(|error| to_py_err(error.into()))
+diff -ruN a/src/robot/robot_core.rs b/src/robot/robot_core.rs
+--- a/src/robot/robot_core.rs	2026-06-03 03:26:25
++++ b/src/robot/robot_core.rs	2026-09-06 15:39:09
+@@ -657,6 +657,7 @@
+                 &axial_jerk_max,
+                 start_idx_s,
+                 false,
++                crate::copp::constraints::ConstraintSide::Both,
+             )?
+             .with_constraint_3order(
+                 &jerk_a_new.as_view(),
+@@ -666,6 +667,7 @@
+                 &axial_jerk_min,
+                 start_idx_s,
+                 true,
++                crate::copp::constraints::ConstraintSide::Both,
+             )?;
+ 
+         Ok(self)
