@@ -15,6 +15,10 @@ source:
 build:
   number: 0
   script:
+    # First exec of the freshly extracted cmake can exceed scikit-build-core's
+    # 5s version probe (20s only when CI is set), which reports it as missing.
+    # Pay that cost here instead.
+    - cmake --version
     # BUILD_CLOUD_CLIENT defaults ON and compiles the vendored third_party/httplib
     # into the main target; that header calls std::current_exception() without
     # including <exception>, which modern libc++ rejects. Nothing here uses the
