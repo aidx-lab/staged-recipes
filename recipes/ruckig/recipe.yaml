@@ -34,8 +34,10 @@ requirements:
     - ${{ compiler('cxx') }}
     - cmake >=3.14
     - ninja
+    # CMake selects the Unix Makefiles generator here even with ninja present.
+    - make
   host:
-    - python  # version from variants.yaml
+    - python
     - pip
     - scikit-build-core >=0.10
     - nanobind >=2.7
