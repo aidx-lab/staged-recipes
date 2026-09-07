@@ -13,9 +13,12 @@ package:
 source:
   url: https://files.pythonhosted.org/packages/source/t/toppra/toppra-${{ version }}.tar.gz
   sha256: 5a8926128a9decce85d11bac3e9a2aa2fbf2882653053b10f5cb42e0e21a401e
+  # matplotlib is used only by Algorithm.inspect(), but imported at module level.
+  patches:
+    - patches/matplotlib_optional.patch
 
 build:
-  number: 0
+  number: 1
   script:
     - ${{ PYTHON }} -m pip install . -vv --no-deps --no-build-isolation
 
@@ -23,7 +26,7 @@ requirements:
   build:
     - ${{ compiler('c') }}
   host:
-    - python  # version from variants.yaml
+    - python
     - pip
     - setuptools
     - wheel
@@ -33,7 +36,6 @@ requirements:
     - python
     - numpy
     - scipy >0.18
-    - matplotlib
 
 tests:
   - python:

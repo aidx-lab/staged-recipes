@@ -1,0 +1,30 @@
+--- a/setup.py
++++ b/setup.py
+@@ -30,7 +30,7 @@
+         DEV_REQUIRES = [line.strip() for line in f if line.strip()]
+ else:
+     with open("requirements3.txt", "r") as f:
+-        REQUIRES = ["scipy>0.18", "numpy", "matplotlib"]
++        REQUIRES = ["scipy>0.18", "numpy"]
+         DEV_REQUIRES = [line.strip() for line in f if line.strip()]
+ 
+ AUTHOR = "Hung Pham"
+--- a/toppra/algorithm/algorithm.py
++++ b/toppra/algorithm/algorithm.py
+@@ -11,7 +11,6 @@
+ import enum
+ import numpy as np
+ import time
+-import matplotlib.pyplot as plt
+ 
+ from toppra.constants import TINY
+ from toppra.interpolator import SplineInterpolator, AbstractGeometricPath
+@@ -195,6 +194,8 @@
+ 
+     def inspect(self, compute=True):
+         """Inspect the problem internal data."""
++        import matplotlib.pyplot as plt  # plotting-only; keeps it off the import path
++
+         K = self.problem_data.K
+         X = self.problem_data.X
+         if X is not None:
