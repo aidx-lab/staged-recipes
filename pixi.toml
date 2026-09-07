@@ -41,7 +41,8 @@ cmd = "python build-locally.py --filter 'linux*'"
 platforms = ["osx-64", "osx-arm64"]
 [feature.osx.tasks.build-osx]
 description = "build directly on a MacOS host machine"
-cmd = "python build-locally.py --filter 'osx*'"
+# run_osx_build.sh mktemps into OSX_SDK_DIR and reports a missing dir as unwritable.
+cmd = "mkdir -p $OSX_SDK_DIR && python build-locally.py --filter 'osx*'"
 [feature.osx.tasks.build-osx.env]
 CONDA_BLD_PATH = "$PIXI_PROJECT_ROOT/build_artifacts"
 MINIFORGE_HOME = "$CONDA_PREFIX"
