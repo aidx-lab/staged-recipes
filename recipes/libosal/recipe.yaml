@@ -30,6 +30,7 @@ requirements:
     - automake
     - libtool
     - make
+    - ${{ stdlib('c') }}
   run_exports:
     - ${{ pin_subpackage(name, upper_bound='x.x.x') }}
 
