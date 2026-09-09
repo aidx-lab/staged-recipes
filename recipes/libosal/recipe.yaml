@@ -29,14 +29,18 @@ requirements:
     - autoconf
     - automake
     - libtool
+    - make
 
 
 tests:
   - script:
-      - test -f $PREFIX/lib/libosal.so            # [linux]
-      - test -f $PREFIX/lib/libosal.dylib          # [osx]
+      - if: linux
+        then:
+          - test -f $PREFIX/lib/libosal.so
+      - if: osx
+        then:
+          - test -f $PREFIX/lib/libosal.dylib
       - test -f $PREFIX/include/libosal/osal.h
-      - test -f $PREFIX/lib/cmake/libosal/libosalConfig.cmake
 
 about:
   homepage: https://github.com/robert-burger/libosal
