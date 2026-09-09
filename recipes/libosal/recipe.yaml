@@ -1,0 +1,56 @@
+schema_version: 1
+
+context:
+  name: libosal
+  version: "0.0.5"
+
+package:
+  name: ${{ name }}
+  version: ${{ version }}
+
+source:
+  url: https://github.com/robert-burger/libosal/archive/refs/tags/${{ version }}.tar.gz
+  sha256: 74528bcac168feb45feffe3178887ee566d38d1a04a58b73f4806b2fdd56e6e3
+
+build:
+  number: 0
+  skip:
+    - win
+  script:
+    - autoreconf -is
+    - ./configure --prefix="${PREFIX}"
+    - make
+    - make install
+
+requirements:
+  build:
+    - ${{ compiler('c') }}
+    - ${{ compiler('cxx') }}
+    - autoconf
+    - automake
+    - libtool
+
+
+tests:
+  - script:
+      - test -f $PREFIX/lib/libosal.so            # [linux]
+      - test -f $PREFIX/lib/libosal.dylib          # [osx]
+      - test -f $PREFIX/include/libosal/osal.h
+      - test -f $PREFIX/lib/cmake/libosal/libosalConfig.cmake
+
+about:
+  homepage: https://github.com/robert-burger/libosal
+  repository: https://github.com/robert-burger/libosal
+  license: LGPL-3.0-only
+  license_file: LICENSE
+  summary: Operating System Abstraction Layer (OSAL) for POSIX, VxWorks, and PikeOS.
+  description: |
+    libosal provides a thin C abstraction layer over OS primitives —
+    mutexes, semaphores, condition variables, tasks/threads, timers,
+    message queues, shared memory, and spinlocks — with backends for
+    POSIX, VxWorks, PikeOS, and Win32. This package builds the POSIX
+    backend as a shared library.
+
+extra:
+  recipe-maintainers:
+    - cornerfarmer
