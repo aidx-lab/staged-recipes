@@ -1,0 +1,62 @@
+schema_version: 1
+
+context:
+  name: libethercat
+  version: "0.6.3"
+
+package:
+  name: ${{ name }}
+  version: ${{ version }}
+
+source:
+  url: https://github.com/robert-burger/libethercat/archive/refs/tags/${{ version }}.tar.gz
+  sha256: 74528bcac168feb45feffe3178887ee566d38d1a04a58b73f4806b2fdd56e6e3
+
+build:
+  number: 0
+  skip:
+    - win
+  script:
+    - autoreconf -is
+    - ./configure --prefix="${PREFIX}" --enable-device-file --enable-device-sock-raw
+    - make
+    - make install
+
+requirements:
+  build:
+    - ${{ compiler('c') }}
+    - ${{ compiler('cxx') }}
+    - autoconf
+    - automake
+    - libtool
+    - make
+    - pkg-config
+  host:
+    - libosal
+  run:
+    - libosal
+
+tests:
+  - script:
+      - test -f $PREFIX/lib/libethercat.so
+      - test -f $PREFIX/include/libethercat/ec.h
+      - pkg-config --modversion libethercat
+ 
+about:
+  homepage: https://github.com/robert-burger/libethercat
+  repository: https://github.com/robert-burger/libethercat
+  license: LGPL-3.0-only
+  license_file:
+    - LICENSE
+    - LICENSE.LGPL-V3
+  summary: User-space EtherCAT master library.
+  description: |
+    libethercat is a lightweight, user-space EtherCAT master
+    implementation written in C. It supports CoE, FoE, SoE, and EoE
+    mailbox protocols, distributed clocks, and multiple hardware
+    backends (raw sockets, mmaped raw sockets, BPF). It depends on
+    libosal for OS abstraction.
+
+extra:
+  recipe-maintainers:
+    - cornerfarmer
