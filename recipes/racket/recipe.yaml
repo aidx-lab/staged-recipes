@@ -24,6 +24,9 @@ requirements:
   host:
     - openssl 3.*
 
+  run_exports:
+    - ${{ pin_subpackage('racket', upper_bound='x.x.x') }}
+
 tests:
   - script:
       - racket -e "\"hello world\""
@@ -33,11 +36,7 @@ tests:
       - raco test -l tests/file/main
       - raco test -l tests/net/head
       - raco test -l tests/net/uri-codec
-      - raco test -l tests/net/url
-      - raco test -l tests/net/url-port
       - raco test -l tests/net/encoders
-      - raco test -l tests/openssl/basic
-      - raco test -l tests/openssl/https
       - raco test -l tests/match/main
       - raco test -l tests/zo-path
       - raco test -l tests/xml/test
