@@ -9,15 +9,14 @@ package:
   version: ${{ version }}
 
 source:
-  url: file://${{ RECIPE_DIR }}/ids-peak_26.06.1_amd64.tar.gz
-  sha256: 83fca5ce1d139c541481319614f49e175be136bb908589b67a61658d6c254df6
+  path: ./ids-peak_${{ version }}_amd64.tar.gz
+  sha256: ebf5db7dabde954e1ea1a4c5e6f25e6e2ae539067fddd8481cb1f2e2165f02dc
 
 build:
-  noarch: python
-  number: 0
+  number: 1
   script: |
-    cp lib/x86_64-linux-gnu/* lib/
-    rm -r lib/x86_64-linux-gnu
+    #cp lib/x86_64-linux-gnu/* lib/ -r
+    #rm -r lib/x86_64-linux-gnu
     cp * $PREFIX/ -r
 
     # Create activation/deactivation scripts
@@ -31,18 +30,20 @@ build:
     cat > $PREFIX/etc/conda/deactivate.d/${{ name }}-env.sh << 'EOF'
     unset GENICAM_GENTL64_PATH
     EOF
+  skip:
+    - win
 
 requirements:
   run:
     - qt-main 5.*
     - libusb
+  run_exports:
+    - ${{ pin_subpackage(name, upper_bound='x.x.x') }}
 
 
 tests:
   - script:
-    ids_peak_cockpit --version
-  - script:
-    ids_ipconfig --version
+    - ids_ipconfig --version
 
 about:
   homepage: https://de.ids-imaging.com/ids-peak.html
