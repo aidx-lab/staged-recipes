@@ -1,0 +1,69 @@
+schema_version: 1
+
+context:
+  name: dp3-topp
+  version: "0.1.0"
+  rev: 82afaf35f18f45f63be919171ad5e84fbc4a9ef6
+
+package:
+  name: ${{ name }}
+  version: ${{ version }}
+
+# No tags or releases upstream: the commit retime's benchmark pins.
+source:
+  url: https://github.com/ZhaoShize123/dp3-topp/archive/${{ rev }}.tar.gz
+  sha256: ce66e97644eddf0c8371c09ae1022dcad324bdac1ace6f67a3e097ad166b00fa
+
+build:
+  number: 0
+  noarch: python
+  script:
+    - ${{ PYTHON }} -m pip install . -vv --no-deps --no-build-isolation
+
+requirements:
+  host:
+    - python >=3.10
+    - pip
+    - setuptools >=68
+    - wheel
+  run:
+    - python >=3.10
+    - numpy
+    - scipy
+    - pyyaml
+    # Imported at package import by dynamics_mujoco and cartesian_path; conda-forge ships the bindings as mujoco-python.
+    - mujoco-python
+    # Only plotting.py imports it, but pyproject declares it; the PyPI python package from our channel.
+    - toppra
+
+tests:
+  - python:
+      imports:
+        - dp3_topp
+        - dp3_topp.optimizer
+      pip_check: true
+  - script:
+      - python -c "import numpy as np; from dp3_topp import ConstraintLimits, DP3Config, PathData, optimize_dp3; s = np.linspace(0.0, 1.0, 201); d = np.array([1.0, 0.5]); path = PathData(s=s, q=s[:, None] * d, q_s=np.tile(d, (201, 1)), q_ss=np.zeros((201, 2)), q_sss=np.zeros((201, 2))); big = 1e12; limits = ConstraintLimits(q_dot_abs=np.ones(2), q_ddot_abs=np.full(2, 10.0), q_jerk_abs=np.full(2, 2000.0), tau_abs=np.full(2, big), tau_rate_abs=np.full(2, big), mechanical_power_lower=-big, mechanical_power_upper=big); r = optimize_dp3(path=path, limits=limits, config=DP3Config(ns=8, nz=12, nch=5)); assert r.feasible and r.total_time > 0.0"
+
+about:
+  homepage: https://github.com/ZhaoShize123/dp3-topp
+  repository: https://github.com/ZhaoShize123/dp3-topp
+  license: LicenseRef-Unlicensed-Upstream
+  summary: Third-party reproduction of Kaserer et al. (T-RO 2019) DP3 path following with jerk and torque-rate limits.
+  description: |
+    Dynamic-programming time-optimal path parameterization (DP3/DP2) with
+    phase-plane interpolation, reproduced by GitHub user ZhaoShize123. Not the
+    authors' implementation.
+
+    Upstream publishes NO license file and no license metadata (checked
+    2026-09-10). This package is built unmodified from commit
+    82afaf35f18f45f63be919171ad5e84fbc4a9ef6 for the ardx channel at the
+    channel owner's decision; it is not eligible for conda-forge as-is.
+
+    Consumed by retime's `dp3` and `dp3_dilated` benchmark arms, which use only
+    the kinematic path (robot=None); mujoco and pyyaml are still required
+    because the package imports them at import time.
+
+extra:
+  recipe-maintainers:
+    - tenhjo
