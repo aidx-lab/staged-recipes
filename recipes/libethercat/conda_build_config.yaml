@@ -1,4 +1,2 @@
 channel_sources:
   - conda-forge,https://prefix.dev/ardx
-c_stdlib_version:
-  - "2.34"
